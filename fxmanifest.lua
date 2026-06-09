@@ -6,9 +6,14 @@ description 'Monarch Devs utilities APIs'
 author 'IlMelons'
 version '0.0.1'
 repository 'https://github.com/Monarch-Devs/mnr_api'
+checker 'https://raw.githubusercontent.com/Monarch-Devs/mnr_api/refs/heads/main/version.json'
 
 files {
     'api.lua',
     'api/shared/*.lua',
     'api/client/*.lua',
+}
+
+server_scripts {
+    'server/*.lua',
 }

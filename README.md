@@ -11,6 +11,7 @@ pollute the resource's global scope.
 mnr_api is ready.
 - A proprietary file importer that supports loading cached or uncached Lua/JSON.
 - A bidirectional RPC system with sequential key generation and timeout support.
+- Server resources name/update global checker
 
 ## LICENSE
 Copyright (c) 2025 Monarch Devs | All rights reserved.

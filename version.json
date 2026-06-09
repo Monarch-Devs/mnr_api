@@ -1,7 +1,6 @@
 {
-    "name": "mnr_api",
     "service": "github",
-    "repository": "Monarch-Devs/mnr_api",
-    "version": "0.0.1",
-    "latest": null
+    "account": "Monarch-Devs",
+    "name": "mnr_api",
+    "version": null
 }
