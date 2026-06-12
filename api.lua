@@ -118,6 +118,7 @@ local function waitReady(key)
     if err then error(err, 2) end
 end
 
+---@type MnrAPI
 local mnr = setmetatable({}, {
     __index = function(_, key)
         if key == 'name' then
@@ -163,6 +164,18 @@ local mnr = setmetatable({}, {
     __metatable = false,
 })
 
+local mnrEnv = setmetatable({ resource = GetCurrentResourceName() }, {
+    __index = function(_, key)
+        local ok, value = pcall(exports.mnr_api.getEnv, nil, key)
+        if not ok then
+            error(('mnrEnv.%s is not available'):format(key), 2)
+        end
+
+        return value
+    end,
+    __metatable = false,
+})
+
 local startEvent = IsDuplicityVersion() and 'onResourceStart' or 'onClientResourceStart'
 local timer
 local handler
@@ -194,4 +207,4 @@ CreateThread(function()
 end)
 
 rawset(_ENV, 'mnr', mnr)
-rawset(_ENV, 'mnrEnv', { resource = GetCurrentResourceName() })
+rawset(_ENV, 'mnrEnv', mnrEnv)
