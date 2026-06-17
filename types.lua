@@ -1,3 +1,15 @@
+---@alias MnrDebugLevel 'debug' | 'info' | 'warn' | 'error'| 'fatal'
+
+---@alias MnrDebugAPI fun(level: MnrDebugLevel, text: string, ...: any)
+
+---@class CronjobAPIOptions
+---@field maxDelay number
+
+---@class MnrCronjob
+---@field schedulerId number
+---@field expression string
+---@field stop fun(self: MnrCronjob): boolean
+
 ---@class MnrClientRPC
 ---@field send fun(name: string, timeout: number | false | nil, cb: function, ...: any)
 ---@field fetch fun(name: string, timeout: number | false | nil, ...: any): any
@@ -14,6 +26,7 @@
 ---@field handle fun(name: string, handler: fun(playerId: number, ...: any))
 
 ---@class MnrSharedAPI
+---@field debug MnrDebugAPI
 ---@field import MnrImportAPI
 ---@field num MnrNumAPI
 
@@ -21,6 +34,7 @@
 ---@field rpc MnrClientRPC
 
 ---@class MnrServerAPI : MnrSharedAPI
+---@field cronjob fun(expression: string, callback: fun(d: osdate), options: CronjobAPIOptions): MnrCronjob
 ---@field rpc MnrServerRPC
 
 ---@alias MnrAPI MnrClientAPI | MnrServerAPI
