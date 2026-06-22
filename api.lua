@@ -8,6 +8,7 @@ local pending = {}
 local pendingCount = 0
 local ready = false
 local loading = {}
+local subscribed = {}
 
 local TIMEOUT = GetConvarInt('mnr_api:api_timeout', 30000)
 local scope = IsDuplicityVersion() and 'server' or 'client'
@@ -165,11 +166,23 @@ local mnr = setmetatable({}, {
 })
 
 local mnrEnv = setmetatable({ resource = GetCurrentResourceName() }, {
-    __index = function(_, key)
-        local ok, value = pcall(exports.mnr_api.getEnv, nil, key)
+    __index = function(self, field)
+        local ok, value = pcall(function()
+            return exports.mnr_api:getEnv(field)
+        end)
         if not ok then
-            error(('mnrEnv.%s is not available'):format(key), 2)
+            error(('mnrEnv.%s is not available'):format(field), 2)
         end
+
+        if not subscribed[field] then
+            subscribed[field] = true
+
+            AddEventHandler(('mnr_api:update:%s'):format(field), function(newValue)
+                rawset(self, field, newValue)
+            end)
+        end
+
+        rawset(self, field, value)
 
         return value
     end,

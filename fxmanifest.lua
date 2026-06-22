@@ -14,6 +14,10 @@ files {
     'api/client/*.lua',
 }
 
+client_scripts {
+    'client/*.lua',
+}
+
 server_scripts {
     'server/*.lua',
 }
