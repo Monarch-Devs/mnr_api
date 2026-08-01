@@ -27,7 +27,7 @@ local function import(path, ext, cache, env)
     if ext == 'json' then
         result = json.decode(file)
     else
-        local chunk, err = load(file, ('@@%s/%s.lua'):format(mnrEnv.resource, path), 't', env)
+        local chunk, err = load(file, ('@@%s/%s.lua'):format(mnrEnv.resource, path), 't', env or _ENV)
         if not chunk then
             loading[key] = nil
             error(('Failed loading "%s": %s'):format(path, err), 2)
