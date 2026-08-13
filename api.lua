@@ -3,11 +3,12 @@ if existing and existing.name == 'mnr_api' then
     error(('mnr_api already loaded in %s - remove duplicate "@mnr_api/api.lua" from fxmanifest.lua'):format(GetCurrentResourceName()))
 end
 
-local registry = {}
+local buildResolver = LoadResourceFile('mnr_api', 'api/loader.lua')
+buildResolver = assert(load(buildResolver, '@@mnr_api/api/loader.lua', 't'))()
+
 local pending = {}
 local pendingCount = 0
 local ready = false
-local loading = {}
 local subscribed = {}
 
 local TIMEOUT = GetConvarInt('mnr_api:api_timeout', 30000)
@@ -15,70 +16,13 @@ local scope = IsDuplicityVersion() and 'server' or 'client'
 
 msgpack.setoption('ignore_invalid', true)
 
-local apiEnvMeta = {
-    __index = _ENV,
-}
-
-local function buildAPIEnv()
-    return setmetatable({}, apiEnvMeta)
-end
-
-local function loadAPI(key)
-    local scopedPath = ('api/%s/%s.lua'):format(scope, key)
-    local sharedPath = ('api/shared/%s.lua'):format(key)
-    local path = scopedPath
-    local code = LoadResourceFile('mnr_api', path)
-
-    if not code then
-        path = sharedPath
-        code = LoadResourceFile('mnr_api', path)
-    end
-
-    if not code then return end
-
-    local fn, err = load(code, ('@@mnr_api/%s'):format(path), 't', buildAPIEnv())
-
-    if not fn then
-        error(('Failed importing API (%s): %s'):format(path, err), 3)
-    end
-
-    local ok, result = pcall(fn)
-
-    if not ok then
-        error(('Failed executing API (%s): %s'):format(path, result), 3)
-    end
-
-    return result
-end
-
-local function resolveKey(key)
-    local cached = registry[key]
-
-    if cached and cached ~= loading then
-        return cached
-    end
-
-    if cached == loading then
-        error(('Circular dependency detected on key: %s'):format(key), 2)
-    end
-
-    registry[key] = loading
-
-    local ok, api = pcall(loadAPI, key)
-    if not ok then
-        registry[key] = nil
-        error(api, 2)
-    end
-
-    if not api then
-        registry[key] = nil
-        error(('API "%s" not found in api/%s/ or api/shared/'):format(key, scope), 2)
-    end
-
-    registry[key] = api
-
-    return api
-end
+local resolveKey, registry, loading = buildResolver({
+    resource = 'mnr_api',
+    scope = scope,
+    readFile = function(path)
+        return LoadResourceFile('mnr_api', path)
+    end,
+})
 
 local function abortPending()
     local snapshot = pending

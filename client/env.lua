@@ -71,7 +71,7 @@ CreateThread(function()
     end
 end)
 
-rawset(_ENV, 'mnrEnv', env)
+rawset(_ENV, '_MnrEnvSource', env)
 
 ---@param key string
 exports('getEnv', function(key)
