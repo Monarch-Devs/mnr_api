@@ -10,19 +10,18 @@ elseif MIN_Y >= MAX_Y then
 end
 
 local CELL_SIZE = 250
-local GRID_WIDTH = math.ceil((MAX_X - MIN_X) / CELL_SIZE)
-local GRID_HEIGHT = math.ceil((MAX_Y - MIN_Y) / CELL_SIZE)
+local TOT_W = math.ceil((MAX_X - MIN_X) / CELL_SIZE)
+local TOT_H = math.ceil((MAX_Y - MIN_Y) / CELL_SIZE)
 
-local generic = {}
-local spatial = {}
 local entries = {}
+local generic, spatial = {}, {}
+local activeIds, cachedIds = {}, {}
 local counter = -1
 local insideByEntry = {}
-local nearbyIds = {}
-local prevNearbyIds = {}
+local pullEntries = {}
 
 local function getIndex(x, y)
-    return y * GRID_WIDTH + x
+    return y * TOT_W + x
 end
 
 local function getCell(grid, x, y)
@@ -37,16 +36,16 @@ local function getCell(grid, x, y)
     return cell
 end
 
-local function worldToCell(x, y)
+local function translateCoords(x, y)
     local cx = math.floor((x - MIN_X) / CELL_SIZE)
     local cy = math.floor((y - MIN_Y) / CELL_SIZE)
 
-    return math.max(0, math.min(cx, GRID_WIDTH - 1)), math.max(0, math.min(cy, GRID_HEIGHT - 1))
+    return math.max(0, math.min(cx, TOT_W - 1)), math.max(0, math.min(cy, TOT_H - 1))
 end
 
-local function getCellRange(minX, minY, maxX, maxY)
-    local fx, fy = worldToCell(minX, minY)
-    local tx, ty = worldToCell(maxX, maxY)
+local function getBounds(bounds)
+    local fx, fy = translateCoords(bounds.minX, bounds.minY)
+    local tx, ty = translateCoords(bounds.maxX, bounds.maxY)
 
     return fx, fy, tx, ty
 end
@@ -58,12 +57,10 @@ local function clearTable(t)
 end
 
 local function getEntriesInRange(grid, minX, minY, maxX, maxY, seen)
-    seen = seen or {}
-
-    local fx, fy, tx, ty = getCellRange(minX, minY, maxX, maxY)
-    for cellY = fy, ty do
-        for cellX = fx, tx do
-            local index = getIndex(cellX, cellY)
+    local fx, fy, tx, ty = getBounds({ minX = minX, minY = minY, maxX = maxX, maxY = maxY })
+    for cy = fy, ty do
+        for cx = fx, tx do
+            local index = getIndex(cx, cy)
             local cell = grid[index]
             if cell then
                 for entryId in pairs(cell) do
@@ -154,9 +151,8 @@ function SpatialEntry.new(data)
     obj.spatial = data.spatial
     obj.shape = data.shape
     obj.event = ('%s:spatial:action'):format(data.resource)
-
     obj.coords = data.coords
-    obj.aabb = data.aabb
+    obj.bounds = data.bounds
 
     if data.shape == 'sphere' then
         obj.radius = data.radius
@@ -228,22 +224,22 @@ CreateThread(function()
     while true do
         local coords = GetEntityCoords(mnrEnv.ped)
 
-        clearTable(nearbyIds)
-        getEntriesInRange(spatial, coords.x - CELL_SIZE, coords.y - CELL_SIZE, coords.x + CELL_SIZE, coords.y + CELL_SIZE, nearbyIds)
+        clearTable(activeIds)
+        getEntriesInRange(spatial, coords.x - CELL_SIZE, coords.y - CELL_SIZE, coords.x + CELL_SIZE, coords.y + CELL_SIZE, activeIds)
 
-        for id in pairs(nearbyIds) do
+        for id in pairs(activeIds) do
             local obj = entries[id]
             if obj then
                 pollEntry(id, obj, coords)
 
-                if not prevNearbyIds[id] then
+                if not cachedIds[id] then
                     obj:activateDebug()
                 end
             end
         end
 
-        for id in pairs(prevNearbyIds) do
-            if not nearbyIds[id] then
+        for id in pairs(cachedIds) do
+            if not activeIds[id] then
                 local obj = entries[id]
                 if obj then
                     obj:deactivateDebug()
@@ -251,7 +247,7 @@ CreateThread(function()
             end
         end
 
-        prevNearbyIds, nearbyIds = nearbyIds, prevNearbyIds
+        cachedIds, activeIds = activeIds, cachedIds
 
         Wait(300)
     end
@@ -259,32 +255,31 @@ end)
 
 local function getShapeBounds(shape, coords, radius, size)
     if shape == 'sphere' then
-        return coords.x - radius, coords.y - radius, coords.z - radius, coords.x + radius, coords.y + radius, coords.z + radius
+        return { minX = coords.x - radius, minY = coords.y - radius, maxX = coords.x + radius, maxY = coords.y + radius }
+    elseif shape == 'box' then
+        local hd = math.sqrt(size.x * size.x + size.y * size.y) * 0.5
+
+        return { minX = coords.x - hd, minY = coords.y - hd, maxX = coords.x + hd, maxY = coords.y + hd }
     end
-
-    local hd = math.sqrt(size.x * size.x + size.y * size.y) * 0.5
-    local z = size.z * 0.5
-
-    return coords.x - hd, coords.y - hd, coords.z - z, coords.x + hd, coords.y + hd, coords.z + z
 end
 
 ---@param entryId number
 local function deleteEntry(entryId)
     local obj = entries[entryId]
-    local grid, fromX, fromY, toX, toY
+    local grid, fx, fy, tx, ty
 
     if obj.spatial then
         grid = spatial
-        fromX, fromY, toX, toY = getCellRange(obj.aabb.minX, obj.aabb.minY, obj.aabb.maxX, obj.aabb.maxY)
+        fx, fy, tx, ty = getBounds(obj.bounds)
     else
         grid = generic
-        fromX, fromY = worldToCell(obj.coords.x, obj.coords.y)
-        toX, toY = fromX, fromY
+        fx, fy = translateCoords(obj.coords.x, obj.coords.y)
+        tx, ty = fx, fy
     end
 
-    for cellY = fromY, toY do
-        for cellX = fromX, toX do
-            local index = getIndex(cellX, cellY)
+    for cy = fy, ty do
+        for cx = fx, tx do
+            local index = getIndex(cx, cy)
             local cell = grid[index]
             if cell then
                 cell[entryId] = nil
@@ -323,7 +318,7 @@ local function addEntry(data)
 
     entries[entryId] = newGenericEntry(normalized)
 
-    local x, y = worldToCell(normalized.coords.x, normalized.coords.y)
+    local x, y = translateCoords(normalized.coords.x, normalized.coords.y)
     getCell(generic, x, y)[entryId] = true
 
     return entryId
@@ -345,8 +340,8 @@ local function addSpatial(data)
         return nil, err
     end
 
-    local minX, minY, minZ, maxX, maxY, maxZ = getShapeBounds(normalized.shape, normalized.coords, normalized.radius, normalized.size)
-    if maxX < MIN_X or minX > MAX_X or maxY < MIN_Y or minY > MAX_Y then
+    local bounds = getShapeBounds(normalized.shape, normalized.coords, normalized.radius, normalized.size)
+    if bounds.maxX < MIN_X or bounds.minX > MAX_X or bounds.maxY < MIN_Y or bounds.minY > MAX_Y then
         return nil, 'entry is outside world bounds'
     end
 
@@ -355,11 +350,11 @@ local function addSpatial(data)
 
     normalized.resource = resource
     normalized.spatial = true
-    normalized.aabb = { minX = minX, minY = minY, minZ = minZ, maxX = maxX, maxY = maxY, maxZ = maxZ }
+    normalized.bounds = bounds
 
     entries[entryId] = SpatialEntry.new(normalized)
 
-    local fx, fy, tx, ty = getCellRange(minX, minY, maxX, maxY)
+    local fx, fy, tx, ty = getBounds(bounds)
     for y = fy, ty do
         for x = fx, tx do
             getCell(spatial, x, y)[entryId] = true
@@ -392,51 +387,59 @@ local function removeEntry(entryId)
 end
 
 ---@param coords vector3
----@param mode 'single' | 'radius'
----@param radius number
 ---@return table? result, string? error
-local function getEntries(coords, mode, radius)
+local function getEntry(coords)
     local resource = GetInvokingResource()
 
     if type(coords) ~= 'vector3' then
         return nil, ('coords must be a vector3 (received %s)'):format(type(coords))
     end
 
-    if mode == 'single' then
-        local ids = getEntriesInRange(generic, coords.x - CELL_SIZE, coords.y - CELL_SIZE, coords.x + CELL_SIZE, coords.y + CELL_SIZE)
+    clearTable(pullEntries)
 
-        local nearest
-        local nearestDistance = math.huge
-        for id in pairs(ids) do
-            local entry = entries[id]
-            if entry and entry.resource == resource then
-                local dx, dy, dz = entry.coords.x - coords.x, entry.coords.y - coords.y, entry.coords.z - coords.z
-                local distance = dx * dx + dy * dy + dz * dz
-                if distance < nearestDistance then
-                    nearest = entry
-                    nearestDistance = distance
-                end
+    getEntriesInRange(generic, coords.x - CELL_SIZE, coords.y - CELL_SIZE, coords.x + CELL_SIZE, coords.y + CELL_SIZE, pullEntries)
+    local nearest
+    local nearestDistance = math.huge
+    for id in pairs(pullEntries) do
+        local entry = entries[id]
+        if entry and entry.resource == resource then
+            local dx, dy, dz = entry.coords.x - coords.x, entry.coords.y - coords.y, entry.coords.z - coords.z
+            local distance = dx * dx + dy * dy + dz * dz
+            if distance < nearestDistance then
+                nearest = entry
+                nearestDistance = distance
             end
         end
-
-        return nearest
-    elseif mode == 'radius' then
-        if type(radius) ~= 'number' then
-            return nil, ('radius must be a number (received %s)'):format(type(radius))
-        end
-
-        local ids = getEntriesInRange(generic, coords.x - radius, coords.y - radius, coords.x + radius, coords.y + radius)
-        local result = {}
-        for id in pairs(ids) do
-            if entries[id] and entries[id].resource == resource then
-                result[#result + 1] = entries[id]
-            end
-        end
-
-        return result
-    else
-        return nil, ('unknown "%s" mode received'):format(mode)
     end
+
+    return nearest
+end
+
+---@param coords vector3
+---@param radius number
+---@return table? result, string? error
+local function getEntries(coords, radius)
+    local resource = GetInvokingResource()
+
+    if type(coords) ~= 'vector3' then
+        return nil, ('coords must be a vector3 (received %s)'):format(type(coords))
+    end
+
+    if type(radius) ~= 'number' then
+        return nil, ('radius must be a number (received %s)'):format(type(radius))
+    end
+
+    clearTable(pullEntries)
+
+    getEntriesInRange(generic, coords.x - radius, coords.y - radius, coords.x + radius, coords.y + radius, pullEntries)
+    local result = {}
+    for id in pairs(pullEntries) do
+        if entries[id] and entries[id].resource == resource then
+            result[#result + 1] = entries[id]
+        end
+    end
+
+    return result
 end
 
 AddEventHandler('onResourceStop', function(resourceName)
@@ -452,4 +455,5 @@ end)
 exports('AddEntry', addEntry)
 exports('AddSpatial', addSpatial)
 exports('RemoveEntry', removeEntry)
+exports('GetEntry', getEntry)
 exports('GetEntries', getEntries)
