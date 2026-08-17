@@ -10,8 +10,7 @@ elseif MIN_Y >= MAX_Y then
 end
 
 local CELL_SIZE = 250
-local TOT_W = math.ceil((MAX_X - MIN_X) / CELL_SIZE)
-local TOT_H = math.ceil((MAX_Y - MIN_Y) / CELL_SIZE)
+local TOT_W, TOT_H = math.ceil((MAX_X - MIN_X) / CELL_SIZE), math.ceil((MAX_Y - MIN_Y) / CELL_SIZE)
 
 local entries = {}
 local generic, spatial = {}, {}
@@ -20,13 +19,8 @@ local counter = -1
 local insideByEntry = {}
 local pullEntries = {}
 
-local function getIndex(x, y)
-    return y * TOT_W + x
-end
-
 local function getCell(grid, x, y)
-    local index = getIndex(x, y)
-
+    local index = y * TOT_W + x
     local cell = grid[index]
     if not cell then
         cell = {}
@@ -43,25 +37,18 @@ local function translateCoords(x, y)
     return math.max(0, math.min(cx, TOT_W - 1)), math.max(0, math.min(cy, TOT_H - 1))
 end
 
-local function getBounds(bounds)
-    local fx, fy = translateCoords(bounds.minX, bounds.minY)
-    local tx, ty = translateCoords(bounds.maxX, bounds.maxY)
-
-    return fx, fy, tx, ty
-end
-
 local function clearTable(t)
     for k in pairs(t) do
         t[k] = nil
     end
 end
 
-local function getEntriesInRange(grid, minX, minY, maxX, maxY, seen)
-    local fx, fy, tx, ty = getBounds({ minX = minX, minY = minY, maxX = maxX, maxY = maxY })
-    for cy = fy, ty do
-        for cx = fx, tx do
-            local index = getIndex(cx, cy)
-            local cell = grid[index]
+local function getNearbyEntries(grid, minX, minY, maxX, maxY, seen)
+    local fx, fy = translateCoords(minX, minY)
+    local tx, ty = translateCoords(maxX, maxY)
+    for y = fy, ty do
+        for x = fx, tx do
+            local cell = grid[y * TOT_W + x]
             if cell then
                 for entryId in pairs(cell) do
                     seen[entryId] = true
@@ -71,6 +58,16 @@ local function getEntriesInRange(grid, minX, minY, maxX, maxY, seen)
     end
 
     return seen
+end
+
+local function indexEntry(grid, entryId, bounds)
+    local fx, fy = translateCoords(bounds.minX, bounds.minY)
+    local tx, ty = translateCoords(bounds.maxX, bounds.maxY)
+    for y = fy, ty do
+        for x = fx, tx do
+            getCell(grid, x, y)[entryId] = true
+        end
+    end
 end
 
 local function vxc(coords, x, y, z, cos, sin)
@@ -138,7 +135,7 @@ function view.box(class)
 end
 
 local function newGenericEntry(data)
-    return { resource = data.resource, coords = data.coords }
+    return { resource = data.resource, coords = data.coords, bounds = { minX = data.coords.x, minY = data.coords.y, maxX = data.coords.x, maxY = data.coords.y } }
 end
 
 local SpatialEntry = {}
@@ -146,9 +143,8 @@ SpatialEntry.__index = SpatialEntry
 
 function SpatialEntry.new(data)
     local obj = setmetatable({}, SpatialEntry)
-
     obj.resource = data.resource
-    obj.spatial = data.spatial
+    obj.spatial = true
     obj.shape = data.shape
     obj.event = ('%s:spatial:action'):format(data.resource)
     obj.coords = data.coords
@@ -223,10 +219,8 @@ end
 CreateThread(function()
     while true do
         local coords = GetEntityCoords(mnrEnv.ped)
-
         clearTable(activeIds)
-        getEntriesInRange(spatial, coords.x - CELL_SIZE, coords.y - CELL_SIZE, coords.x + CELL_SIZE, coords.y + CELL_SIZE, activeIds)
-
+        getNearbyEntries(spatial, coords.x, coords.y, coords.x, coords.y, activeIds)
         for id in pairs(activeIds) do
             local obj = entries[id]
             if obj then
@@ -266,20 +260,13 @@ end
 ---@param entryId number
 local function deleteEntry(entryId)
     local obj = entries[entryId]
-    local grid, fx, fy, tx, ty
+    local grid = obj.spatial and spatial or generic
 
-    if obj.spatial then
-        grid = spatial
-        fx, fy, tx, ty = getBounds(obj.bounds)
-    else
-        grid = generic
-        fx, fy = translateCoords(obj.coords.x, obj.coords.y)
-        tx, ty = fx, fy
-    end
-
-    for cy = fy, ty do
-        for cx = fx, tx do
-            local index = getIndex(cx, cy)
+    local fx, fy = translateCoords(obj.bounds.minX, obj.bounds.minY)
+    local tx, ty = translateCoords(obj.bounds.maxX, obj.bounds.maxY)
+    for y = fy, ty do
+        for x = fx, tx do
+            local index = y * TOT_W + x
             local cell = grid[index]
             if cell then
                 cell[entryId] = nil
@@ -293,7 +280,7 @@ local function deleteEntry(entryId)
     insideByEntry[entryId] = nil
 
     if obj.spatial then
-        entries[entryId]:deactivateDebug()
+        obj:deactivateDebug()
     end
 
     entries[entryId] = nil
@@ -317,9 +304,7 @@ local function addEntry(data)
     local entryId = counter
 
     entries[entryId] = newGenericEntry(normalized)
-
-    local x, y = translateCoords(normalized.coords.x, normalized.coords.y)
-    getCell(generic, x, y)[entryId] = true
+    indexEntry(generic, entryId, { minX = normalized.coords.x, minY = normalized.coords.y, maxX = normalized.coords.x, maxY = normalized.coords.y })
 
     return entryId
 end
@@ -332,6 +317,10 @@ local function addSpatial(data)
         normalized, err = mnr.typecheck.schema(data, { coords = { expected = 'vector3', required = true }, radius = { expected = 'number', defaults = 1.0 }, debug = { expected = 'boolean' } }, { shape = 'sphere' })
     elseif data.shape == 'box' then
         normalized, err = mnr.typecheck.schema(data, { coords = { expected = 'vector3', required = true }, size = { expected = 'vector3', defaults = vec3(1.0, 1.0, 1.0) }, rotation = { expected = 'number', defaults = 0.0 }, debug = { expected = 'boolean' } }, { shape = 'box' })
+
+        if normalized then
+            normalized.rotation = math.rad(normalized.rotation)
+        end
     else
         normalized, err = nil, ('unknown entry shape "%s"'):format(tostring(data.shape))
     end
@@ -349,17 +338,10 @@ local function addSpatial(data)
     local entryId = counter
 
     normalized.resource = resource
-    normalized.spatial = true
     normalized.bounds = bounds
 
     entries[entryId] = SpatialEntry.new(normalized)
-
-    local fx, fy, tx, ty = getBounds(bounds)
-    for y = fy, ty do
-        for x = fx, tx do
-            getCell(spatial, x, y)[entryId] = true
-        end
-    end
+    indexEntry(spatial, entryId, bounds)
 
     return entryId
 end
@@ -397,7 +379,7 @@ local function getEntry(coords)
 
     clearTable(pullEntries)
 
-    getEntriesInRange(generic, coords.x - CELL_SIZE, coords.y - CELL_SIZE, coords.x + CELL_SIZE, coords.y + CELL_SIZE, pullEntries)
+    getNearbyEntries(generic, coords.x - CELL_SIZE, coords.y - CELL_SIZE, coords.x + CELL_SIZE, coords.y + CELL_SIZE, pullEntries)
     local nearest
     local nearestDistance = math.huge
     for id in pairs(pullEntries) do
@@ -431,7 +413,7 @@ local function getEntries(coords, radius)
 
     clearTable(pullEntries)
 
-    getEntriesInRange(generic, coords.x - radius, coords.y - radius, coords.x + radius, coords.y + radius, pullEntries)
+    getNearbyEntries(generic, coords.x - radius, coords.y - radius, coords.x + radius, coords.y + radius, pullEntries)
     local result = {}
     for id in pairs(pullEntries) do
         if entries[id] and entries[id].resource == resource then
