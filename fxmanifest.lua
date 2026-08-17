@@ -4,7 +4,7 @@ game 'gta5'
 name 'mnr_api'
 description 'Monarch Devs utilities APIs'
 author 'IlMelons'
-version '1.2.1'
+version '1.2.2'
 repository 'https://github.com/Monarch-Devs/mnr_api'
 checker 'https://raw.githubusercontent.com/Monarch-Devs/mnr_api/refs/heads/main/version.json'
 
