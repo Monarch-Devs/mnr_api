@@ -15,6 +15,7 @@ local TOT_W, TOT_H = math.ceil((MAX_X - MIN_X) / CELL_SIZE), math.ceil((MAX_Y - 
 local entries = {}
 local generic, spatial = {}, {}
 local activeIds, cachedIds = {}, {}
+local nearbyDebug = {}
 local counter = -1
 local insideByEntry = {}
 local pullEntries = {}
@@ -164,30 +165,12 @@ function SpatialEntry.new(data)
     end
 
     obj.debug = data.debug or false
-    obj.drawing = false
 
     if obj.debug and obj.shape == 'box' then
         obj.vertices = computeBoxVertices(data.coords, data.size, data.rotation)
     end
 
     return obj
-end
-
-function SpatialEntry:activateDebug()
-    if not self.debug or self.drawing then return end
-
-    self.drawing = true
-
-    CreateThread(function()
-        while self.drawing do
-            view[self.shape](self)
-            Wait(0)
-        end
-    end)
-end
-
-function SpatialEntry:deactivateDebug()
-    self.drawing = false
 end
 
 local check = {}
@@ -225,25 +208,31 @@ CreateThread(function()
             local obj = entries[id]
             if obj then
                 pollEntry(id, obj, coords)
-
-                if not cachedIds[id] then
-                    obj:activateDebug()
-                end
-            end
-        end
-
-        for id in pairs(cachedIds) do
-            if not activeIds[id] then
-                local obj = entries[id]
-                if obj then
-                    obj:deactivateDebug()
-                end
             end
         end
 
         cachedIds, activeIds = activeIds, cachedIds
 
-        Wait(300)
+        Wait(250)
+    end
+end)
+
+CreateThread(function()
+    while true do
+        local coords = GetEntityCoords(mnrEnv.ped)
+        clearTable(nearbyDebug)
+        getNearbyEntries(spatial, coords.x - 100.0, coords.y - 100.0, coords.x + 100.0, coords.y + 100.0, nearbyDebug)
+
+        local found = false
+        for id in pairs(nearbyDebug) do
+            local entry = entries[id]
+            if entry and entry.debug then
+                view[entry.shape](entry)
+                found = true
+            end
+        end
+
+        Wait(found and 0 or 1000)
     end
 end)
 
@@ -278,10 +267,6 @@ local function deleteEntry(entryId)
     end
 
     insideByEntry[entryId] = nil
-
-    if obj.spatial then
-        obj:deactivateDebug()
-    end
 
     entries[entryId] = nil
 end
