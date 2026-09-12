@@ -1,6 +1,43 @@
 ---@alias MnrDebugLevel 'debug' | 'info' | 'warn' | 'error'| 'fatal'
 
 ---@alias MnrDebugAPI fun(level: MnrDebugLevel, text: string, ...: any)
+---@alias MnrKeymappingAPI fun(data: MnrKeymappingOptions): MnrKeymapping
+
+---@class MnrKeymappingOptions
+---@field name string
+---@field description string
+---@field default MnrControlSettings
+---@field secondary MnrControlSettings
+---@field warning boolean
+---@field pausemenu boolean
+---@field active boolean
+---@field onPressed fun(self: self)
+---@field onReleased fun(self: self)
+
+---@class MnrControlSettings
+---@field device string
+---@field control string
+
+---@class MnrKeymapping
+---@field name string
+---@field description string
+---@field default MnrControlSettings
+---@field secondary MnrControlSettings
+---@field warning boolean
+---@field pausemenu boolean
+---@field active boolean
+---@field onPressed fun(self: self)
+---@field onReleased fun(self: self)
+---@field pressed fun(self: self): boolean
+---@field current fun(self: self): string, string?
+---@field toggle fun(self: self, enable: boolean)
+---@field _1sthash number
+---@field _2ndhash number?
+---@field _pressed boolean
+---@field _available fun(self: self): boolean
+---@field _press fun(self: self)
+---@field _release fun(self: self)
+---@field _register fun(self: self)
 
 ---@class CronjobAPIOptions
 ---@field maxDelay number
@@ -47,6 +84,7 @@
 
 ---@class MnrClientAPI : MnrSharedAPI
 ---@field rpc MnrClientRPC
+---@field keymapping MnrKeymappingAPI
 
 ---@class MnrServerAPI : MnrSharedAPI
 ---@field cronjob fun(expression: string, callback: fun(d: osdate), options: CronjobAPIOptions): MnrCronjob
