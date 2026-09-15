@@ -2,6 +2,7 @@
 
 ---@alias MnrDebugAPI fun(level: MnrDebugLevel, text: string, ...: any)
 ---@alias MnrKeymappingAPI fun(data: MnrKeymappingOptions): MnrKeymapping
+---@alias MnrI18NAPI fun(key: string, ...: any): string?
 
 ---@class MnrKeymappingOptions
 ---@field name string
@@ -77,6 +78,7 @@
 
 ---@class MnrSharedAPI
 ---@field debug MnrDebugAPI
+---@field i18n MnrI18NAPI
 ---@field import MnrImportAPI
 ---@field num MnrNumAPI
 ---@field timestamp MnrTimestampAPI
