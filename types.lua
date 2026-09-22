@@ -40,6 +40,10 @@
 ---@field _release fun(self: self)
 ---@field _register fun(self: self)
 
+---@class MnrControlsAPI
+---@field enable fun(control: number)
+---@field disable fun(control: number)
+
 ---@class CronjobAPIOptions
 ---@field maxDelay number
 
@@ -85,8 +89,9 @@
 ---@field typecheck MnrTypecheckAPI
 
 ---@class MnrClientAPI : MnrSharedAPI
----@field rpc MnrClientRPC
+---@field controls MnrControlsAPI
 ---@field keymapping MnrKeymappingAPI
+---@field rpc MnrClientRPC
 
 ---@class MnrServerAPI : MnrSharedAPI
 ---@field cronjob fun(expression: string, callback: fun(d: osdate), options: CronjobAPIOptions): MnrCronjob
