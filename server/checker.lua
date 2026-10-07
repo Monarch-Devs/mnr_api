@@ -40,8 +40,13 @@ local function semverGt(a, b)
     local a1, a2, a3 = parseSemver(a)
     local b1, b2, b3 = parseSemver(b)
 
-    if a1 ~= b1 then return a1 > b1 end
-    if a2 ~= b2 then return a2 > b2 end
+    if a1 ~= b1 then
+        return a1 > b1
+    end
+
+    if a2 ~= b2 then
+        return a2 > b2
+    end
 
     return a3 > b3
 end
@@ -53,7 +58,9 @@ end
 ---@return string | false
 local function buildReleaseLink(service, account, name, version)
     local base = SERVICES[service]
-    if not base then return false end
+    if not base then
+        return false
+    end
 
     return ('%s/releases/tag/v%s'):format(base:format(account, name), version)
 end
@@ -114,13 +121,6 @@ local function checkResource(name, url, results, done)
     end, 'GET', '', { ['Cache-Control'] = 'no-cache', ['Pragma'] = 'no-cache' })
 end
 
-local function makeHeader(text)
-    local inner = (' %s '):format(text)
-    local left = math.floor((100 - #inner) / 2)
-
-    return ('^5%s%s%s^0'):format(('='):rep(left), inner, ('='):rep(100 - #inner - left))
-end
-
 CreateThread(function()
     Wait(2000)
 
@@ -145,11 +145,11 @@ CreateThread(function()
         completed += 1
         if completed < total then return end
 
-        print(makeHeader(('MONARCH CHECKER START [%s]'):format(os.date('%d/%m/%Y %H:%M:%S'))))
+        print(('^5> MONARCH RESOURCES CHECKER [%s]^0'):format(os.date('%d/%m/%Y %H:%M:%S')))
         for i = 1, #results do
             print(results[i])
         end
-        print(makeHeader(('MONARCH CHECKER ENDED (%d/%d)'):format(completed, total)))
+        print(('^5> MONARCH RESOURCES CHECKED (%d/%d)^0'):format(completed, total))
 
         results = nil
         toCheck = nil
