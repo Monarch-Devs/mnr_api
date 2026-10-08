@@ -4,86 +4,104 @@ local UPDATE = GetConvarBool('mnr_api:update_checker', true)
 if not RENAME and not UPDATE then return end
 
 local SERVICES = {
-    github = 'https://github.com/%s/%s',
-    gitlab = 'https://gitlab.com/%s/%s',
-}
-
-local VALID_URLS = {
-    '^https://raw%.githubusercontent%.com/',
-    '^https://gitlab%.com/.+/%-/raw/.+',
+    github = '[https://github.com/%s/%s]',
+    gitlab = '[https://gitlab.com/%s/%s]',
 }
 
 ---@param url string
----@return boolean isValid
-local function isValidUrl(url)
-    for i = 1, #VALID_URLS do
-        if url:match(VALID_URLS[i]) then
-            return true
-        end
+---@return boolean valid
+local function validateUrl(url)
+    if url:match('^https://raw%.githubusercontent%.com/') then
+        return true
     end
 
-    return false
+    return url:match('^https://gitlab%.com/.+/%-/raw/.+') ~= nil
 end
 
----@param v string
----@return integer, integer, integer
-local function parseSemver(v)
-    local a, b, c = v:match('^v?(%d+)%.(%d+)%.(%d+)$')
-
-    return tonumber(a) or 0, tonumber(b) or 0, tonumber(c) or 0
-end
-
----@param a string
----@param b string
----@return boolean
-local function semverGt(a, b)
-    local a1, a2, a3 = parseSemver(a)
-    local b1, b2, b3 = parseSemver(b)
-
-    if a1 ~= b1 then
-        return a1 > b1
-    end
-
-    if a2 ~= b2 then
-        return a2 > b2
-    end
-
-    return a3 > b3
-end
-
----@param service 'github' | 'gitlab'
----@param account string
----@param name string
 ---@param version string
----@return string | false
-local function buildReleaseLink(service, account, name, version)
-    local base = SERVICES[service]
-    if not base then
+---@return number? major, number? minor, number? patch
+local function parseVersion(version)
+    local major, minor, patch = version:match('^v?(%d+)%.(%d+)%.(%d+)$')
+
+    if not major then
+        return nil
+    end
+
+    return tonumber(major), tonumber(minor), tonumber(patch)
+end
+
+---@param latest string
+---@param actual string
+---@return -1 | 0 | 1 | false
+local function compareVersions(latest, actual)
+    local a1, a2, a3 = parseVersion(latest)
+    local b1, b2, b3 = parseVersion(actual)
+
+    if not a1 or not b1 then
         return false
     end
 
-    return ('%s/releases/tag/v%s'):format(base:format(account, name), version)
+    if a1 ~= b1 then
+        return a1 > b1 and 1 or -1
+    end
+
+    if a2 ~= b2 then
+        return a2 > b2 and 1 or -1
+    end
+
+    if a3 ~= b3 then
+        return a3 > b3 and 1 or -1
+    end
+
+    return 0
 end
+
+---@param service 'github' | 'gitlab' | nil
+---@param account string?
+---@param name string?
+---@return string repository
+local function buildRepositoryLink(service, account, name)
+    if not SERVICES[service] then
+        return '[UNKNOWN SERVICE]'
+    end
+
+    if not account then
+        return '[UNKNOWN ACCOUNT]'
+    end
+
+    if not name then
+        return '[UNKNOWN REPOSITORY]'
+    end
+
+    return SERVICES[service]:format(account, name)
+end
+
+local CASES = {
+    [false] = '^1[!!!] "%s" has a malformed version [local: %s | remote: %s] %s^0',
+    [-1] = '^2[>] "%s" local newer [%s > %s] %s^0',
+    [0] = '^2[=] "%s" up to date [%s = %s] %s^0',
+    [1] = '^3[<] "%s" update [%s < %s] %s^0',
+}
 
 ---@param name string
 ---@param url string
 ---@param results table
 ---@param done fun()
 local function checkResource(name, url, results, done)
-    if not isValidUrl(url) then
+    if not validateUrl(url) then
         results[#results + 1] = ('^1[!!] "%s" checker URL is not allowed: %s^0'):format(name, url)
         return done()
     end
 
     PerformHttpRequest(url, function(status, body)
         if status ~= 200 or not body then
-            results[#results + 1] = ('^3[CHECKER] Failed to fetch version.json for "%s" (HTTP %d)^0'):format(name, status)
+            results[#results + 1] = ('^3[!!!] Failed to fetch version.json for "%s"^0'):format(name)
             return done()
         end
 
         local data = json.decode(body)
         if type(data) ~= 'table' then
-            results[#results + 1] = ('^3[CHECKER] Invalid version.json for "%s"^0'):format(name)
+            results[#results + 1] = ('^3[!!!] Invalid version.json for "%s"^0'):format(name)
             return done()
         end
 
@@ -93,28 +111,18 @@ local function checkResource(name, url, results, done)
 
         if RENAME then
             if not canonicalName then
-                results[#results + 1] = ('^3[CHECKER] Missing or invalid "name" in version.json for "%s"^0'):format(name)
+                results[#results + 1] = ('^3[!!!] Missing or invalid "name" in version.json for "%s"^0'):format(name)
             elseif canonicalName ~= name then
                 results[#results + 1] = ('^1[!] "%s" named wrong, rename it to "%s"^0'):format(name, canonicalName)
             end
         end
 
         if UPDATE and type(data.version) == 'string' then
-            local latest = data.version:match('^v?(%d+%.%d+%.%d+)$')
-            if not latest then
-                results[#results + 1] = ('^3[CHECKER] Invalid version format in version.json for "%s"^0'):format(name)
-                return done()
-            end
+            local actual = GetResourceMetadata(name, 'version', 0) or '0.0.0'
+            local repository = buildRepositoryLink(service, account, canonicalName)
 
-            local current = GetResourceMetadata(name, 'version', 0) or '0.0.0'
-            local link = (service and account and canonicalName) and buildReleaseLink(service, account, canonicalName, latest) or false
-            local linkStr = link and (' [%s]'):format(link) or ''
-
-            if semverGt(latest, current) then
-                results[#results + 1] = ('^3[?] "%s" update [%s < %s]%s^0'):format(name, current, latest, linkStr)
-            else
-                results[#results + 1] = ('^2[+] "%s" up to date [%s = %s]^0'):format(name, current, latest)
-            end
+            local comparison = compareVersions(data.version, actual)
+            results[#results + 1] = CASES[comparison]:format(name, actual, data.version, repository)
         end
 
         done()
@@ -146,10 +154,12 @@ CreateThread(function()
         if completed < total then return end
 
         print(('^5> MONARCH RESOURCES CHECKER [%s]^0'):format(os.date('%d/%m/%Y %H:%M:%S')))
+
         for i = 1, #results do
             print(results[i])
         end
-        print(('^5> MONARCH RESOURCES CHECKED (%d/%d)^0'):format(completed, total))
+
+        print('^5> MONARCH RESOURCES CHECKER [COMPLETE]^0')
 
         results = nil
         toCheck = nil
