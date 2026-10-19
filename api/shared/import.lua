@@ -3,16 +3,22 @@ local loading = {}
 
 ---@type MnrImportAPI
 local function import(path, ext, cache, env)
-    if type(path) ~= 'string' then error(('Path must be a string, received %s'):format(type(path)), 2) end
-    if ext ~= 'lua' and ext ~= 'json' then error(('Unsupported extension "%s", expected "lua" or "json"'):format(tostring(ext)), 2) end
-
-    local key = ('%s|%s'):format(path, ext)
-    if loading[key] then
-        error(('Circular dependency detected while loading "%s"'):format(path), 2)
+    if type(path) ~= 'string' then
+        error(('Path must be a string, received %s'):format(type(path)), 2)
     end
+
+    if ext ~= 'lua' and ext ~= 'json' then
+        error(('Unsupported extension "%s", expected "lua" or "json"'):format(tostring(ext)), 2)
+    end
+
+    local key = path..'|'..ext
 
     if cache and cached[key] ~= nil then
         return cached[key]
+    end
+
+    if loading[key] then
+        error(('Circular dependency detected while loading "%s"'):format(path), 2)
     end
 
     loading[key] = true

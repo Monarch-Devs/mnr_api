@@ -1,6 +1,8 @@
 fx_version 'cerulean'
 game 'gta5'
 
+use_experimental_fxv2_oal 'yes'
+
 name 'mnr_api'
 description 'Monarch Devs utilities APIs'
 author 'IlMelons'

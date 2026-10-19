@@ -1,55 +1,52 @@
-local lang = GetConvar('mnr:locale', 'en')
-local _loaded = false
+local language = GetConvar('mnr:locale', 'en')
 local _locales = {}
 
 local _keysBuffer = {}
 
 ---@param data table
 ---@param lvl number
-local function _flatKeys(data, lvl)
+local function flatKeys(data, lvl)
     for key, value in pairs(data) do
         _keysBuffer[lvl] = key
         if type(value) == 'table' then
-            _flatKeys(value, lvl + 1)
+            flatKeys(value, lvl + 1)
         else
             _locales[table.concat(_keysBuffer, '.', 1, lvl)] = value
         end
     end
 end
 
----@param language string
-local function _loadLocales(language)
-    local data = mnr.import(('locales/%s'):format(language), 'json')
-    if not data then
-        error(('unable to load "locales/%s.json"'):format(language), 3)
+---@param lang string
+local function loadLocales(lang)
+    local path = ('locales/%s.json'):format(lang)
+    local file = LoadResourceFile(mnrEnv.resource, path)
+    if not file then
+        error(('unable to load "%s"'):format(path), 2)
     end
 
-    _flatKeys(data, 1)
+    local data = json.decode(file)
+    if type(data) ~= 'table' then
+        error(('invalid locale file "%s"'):format(path), 2)
+    end
+
+    flatKeys(data, 1)
+end
+
+loadLocales('en')
+
+if language ~= 'en' then
+    loadLocales(language)
 end
 
 ---@type MnrI18NAPI
 local function i18n(key, ...)
-    if not _loaded then
-        _loadLocales('en')
-
-        if lang ~= 'en' then
-            _loadLocales(lang)
-        end
-
-        _loaded = true
-    end
-
     local locale = _locales[key]
 
-    if type(locale) ~= 'string' then
-        error(('the requested "%s" locale key does not exist or has the wrong type'):format(key), 2)
-    end
-
-    if ... then
+    if type(locale) == 'string' and select('#', ...) > 0 then
         return locale:format(...)
     end
 
-    return locale
+    return locale or key
 end
 
 return i18n

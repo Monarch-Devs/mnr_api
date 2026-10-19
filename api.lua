@@ -35,6 +35,41 @@ local function abortPending()
     end
 end
 
+local function preloadAPI()
+    local resource = GetCurrentResourceName()
+    local keys = {}
+
+    local count = GetNumResourceMetadata(resource, 'mnr_preload')
+    for i = 0, count - 1 do
+        local key = GetResourceMetadata(resource, 'mnr_preload', i)
+
+        if key and key ~= '' then
+            keys[#keys + 1] = key
+        end
+    end
+
+    local extraCount = GetNumResourceMetadata(resource, 'mnr_preload_extra')
+    for i = 0, extraCount - 1 do
+        local extra = GetResourceMetadata(resource, 'mnr_preload_extra', i)
+
+        if extra then
+            local decoded = json.decode(extra)
+
+            if type(decoded) == 'table' then
+                for _, key in ipairs(decoded) do
+                    if type(key) == 'string' and key ~= '' then
+                        keys[#keys + 1] = key
+                    end
+                end
+            end
+        end
+    end
+
+    for i = 1, #keys do
+        resolveKey(keys[i])
+    end
+end
+
 local function initAPI()
     ready = true
 
@@ -146,12 +181,14 @@ handler = AddEventHandler(startEvent, function(name)
     end
 
     initAPI()
+    preloadAPI()
 end)
 
 CreateThread(function()
     if GetResourceState('mnr_api') == 'started' then
         RemoveEventHandler(handler)
         initAPI()
+        preloadAPI()
         return
     end
 

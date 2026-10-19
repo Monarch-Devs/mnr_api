@@ -41,8 +41,8 @@
 ---@field _register fun(self: self)
 
 ---@class MnrControlsAPI
----@field enable fun(control: number)
----@field disable fun(control: number)
+---@field enable fun(control: number | number[])
+---@field disable fun(control: number | number[])
 
 ---@class CronjobAPIOptions
 ---@field maxDelay number

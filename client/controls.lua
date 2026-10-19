@@ -89,9 +89,19 @@ end)
 exports('ToggleControl', function(control, toggle)
     local owner = GetInvokingResource()
 
-    if toggle then
-        return enable(control, owner)
-    else
-        return disable(control, owner)
+    if type(control) == 'number' then
+        control = { control }
+    elseif type(control) ~= 'table' then
+        return false, 'controls must be a number or an array'
     end
+
+    local fn = toggle and enable or disable
+    for i = 1, #control do
+        local success, err = fn(control[i], owner)
+        if not success then
+            return false, err
+        end
+    end
+
+    return true
 end)
