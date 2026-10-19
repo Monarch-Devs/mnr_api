@@ -6,7 +6,7 @@ use_experimental_fxv2_oal 'yes'
 name 'mnr_api'
 description 'Monarch Devs utilities APIs'
 author 'IlMelons'
-version '1.5.2'
+version '1.6.0'
 repository 'https://github.com/Monarch-Devs/mnr_api'
 checker 'https://raw.githubusercontent.com/Monarch-Devs/mnr_api/refs/heads/main/version.json'
 
